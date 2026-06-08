@@ -5,3 +5,4 @@ mptext-app/node_modules/
 .env
 *.local.toml
 .DS_Store
+.cursor/
