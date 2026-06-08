@@ -99,7 +99,8 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
             for acc in accounts {
-                println!("{}\t{}", acc.nickname, acc.fakeid);
+                let alias = acc.alias.as_deref().unwrap_or("-");
+                println!("{}\t{}\t{}", acc.nickname, acc.fakeid, alias);
             }
         }
         Commands::Articles {
@@ -148,7 +149,7 @@ async fn fetch_batch(
     output_dir: &Path,
     interval_secs: f64,
 ) -> Result<()> {
-    let page_size = limit.min(20).max(1);
+    let page_size = limit.clamp(1, 20);
     let mut collected = Vec::new();
     let mut begin = 0u32;
 
