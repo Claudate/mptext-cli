@@ -202,9 +202,9 @@ fn merge_and_save_accounts(fresh: &[AccountItem]) {
     }
 }
 
-/// 收藏的公众号排在前面（保持各自相对顺序）
+/// 收藏的公众号排在前面（稳定排序，保持各自相对顺序）
 fn sort_accounts(mut list: Vec<AccountItem>) -> Vec<AccountItem> {
-    list.sort_by(|a, b| b.favorite.cmp(&a.favorite));
+    list.sort_by_key(|item| std::cmp::Reverse(item.favorite));
     list
 }
 
