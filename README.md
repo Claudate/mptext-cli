@@ -13,7 +13,6 @@
 | macOS Apple Silicon | `mptext_x.x.x_macOS-arm64.zip` |
 | macOS Intel | `mptext_x.x.x_macOS-x64.zip` |
 | Windows | `mptext_x.x.x_Windows-x64.zip` |
-| Linux | `mptext_x.x.x_Linux-x64.tar.gz` |
 
 **方式 B — 源码编译**
 

@@ -36,7 +36,7 @@ impl MptextClient {
         }
 
         let http = Client::builder()
-            .user_agent("mptext-cli/0.1.0")
+            .user_agent(format!("mptext-cli/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .context("创建 HTTP 客户端失败")?;
 

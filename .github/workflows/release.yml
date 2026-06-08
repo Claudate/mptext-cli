@@ -52,19 +52,12 @@ jobs:
           - platform: macos-latest
             label: macOS-arm64
             target: aarch64-apple-darwin
-            archive: zip
           - platform: macos-latest
             label: macOS-x64
             target: x86_64-apple-darwin
-            archive: zip
           - platform: windows-latest
             label: Windows-x64
             target: x86_64-pc-windows-msvc
-            archive: zip
-          - platform: ubuntu-latest
-            label: Linux-x64
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -79,20 +72,16 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package (Unix)
-        if: matrix.platform != 'windows-latest'
+      - name: Package (macOS)
+        if: matrix.platform == 'macos-latest'
         run: |
           VERSION="${{ needs.resolve-version.outputs.app_version }}"
           NAME="mptext_${VERSION}_${{ matrix.label }}"
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/mptext" "dist/mptext"
           chmod +x "dist/mptext"
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            (cd dist && zip -r "../${NAME}.zip" mptext)
-          else
-            tar -czf "${NAME}.tar.gz" -C dist mptext
-          fi
-          ls -la *.zip *.tar.gz 2>/dev/null || ls -la
+          (cd dist && zip -r "../${NAME}.zip" mptext)
+          ls -la *.zip
 
       - name: Package (Windows)
         if: matrix.platform == 'windows-latest'
@@ -111,9 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mptext-${{ matrix.label }}
-          path: |
-            mptext_*.zip
-            mptext_*.tar.gz
+          path: mptext_*.zip
 
   release:
     name: Publish Release

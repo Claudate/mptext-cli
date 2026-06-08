@@ -1,6 +1,6 @@
 [package]
 name = "mptext-cli"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "CLI for mptext.top WeChat article API (search, list, download)"
 license = "MIT"

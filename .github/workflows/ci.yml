@@ -12,8 +12,14 @@ env:
 
 jobs:
   rust:
-    name: Check & Build
-    runs-on: ubuntu-latest
+    name: Check & Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -24,3 +30,6 @@ jobs:
         run: cargo clippy -- -D warnings
       - name: Build
         run: cargo build --release
+      - name: Test
+        if: matrix.os == 'windows-latest'
+        run: cargo test
