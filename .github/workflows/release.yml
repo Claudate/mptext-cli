@@ -1,0 +1,141 @@
+name: Release
+
+# 推送 v* 标签或手动触发时，跨平台编译 mptext CLI 并上传到 GitHub Release。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "覆盖版本号（如 0.1.1）；留空则读取 Cargo.toml"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.meta.outputs.app_version }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve semantic version
+        id: meta
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+            VER="${TAG#v}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            VER="${{ inputs.version }}"
+            TAG="v${VER}"
+          else
+            VER=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            TAG="v${VER}"
+          fi
+          echo "app_version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release: ${TAG} (app version ${VER})"
+
+  build:
+    name: Build (${{ matrix.label }})
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            label: macOS-arm64
+            target: aarch64-apple-darwin
+            archive: zip
+          - platform: macos-latest
+            label: macOS-x64
+            target: x86_64-apple-darwin
+            archive: zip
+          - platform: windows-latest
+            label: Windows-x64
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - platform: ubuntu-latest
+            label: Linux-x64
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.app_version }}"
+          NAME="mptext_${VERSION}_${{ matrix.label }}"
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/mptext" "dist/mptext"
+          chmod +x "dist/mptext"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            (cd dist && zip -r "../${NAME}.zip" mptext)
+          else
+            tar -czf "${NAME}.tar.gz" -C dist mptext
+          fi
+          ls -la *.zip *.tar.gz 2>/dev/null || ls -la
+
+      - name: Package (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve-version.outputs.app_version }}"
+          $name = "mptext_${version}_${{ matrix.label }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/mptext.exe" "dist/mptext.exe"
+          Compress-Archive -Path "dist/mptext.exe" -DestinationPath "${name}.zip" -Force
+          Get-ChildItem *.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mptext-${{ matrix.label }}
+          path: |
+            mptext_*.zip
+            mptext_*.tar.gz
+
+  release:
+    name: Publish Release
+    needs: [resolve-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.tag_name }}
+          name: mptext-cli ${{ needs.resolve-version.outputs.tag_name }}
+          draft: false
+          generate_release_notes: true
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

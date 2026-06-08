@@ -2,7 +2,20 @@
 
 [mptext.top](https://down.mptext.top) 公众号文章 API 的命令行工具。支持搜索公众号、拉取文章列表、单篇/批量下载为 Markdown/HTML 等格式。
 
-## 安装
+### 安装
+
+**方式 A — 下载预编译包（推荐）**
+
+在 [Releases](https://github.com/Claudate/mptext-cli/releases) 下载对应平台包，解压后将 `mptext` 放入 PATH。
+
+| 平台 | 文件 |
+|------|------|
+| macOS Apple Silicon | `mptext_x.x.x_macOS-arm64.zip` |
+| macOS Intel | `mptext_x.x.x_macOS-x64.zip` |
+| Windows | `mptext_x.x.x_Windows-x64.zip` |
+| Linux | `mptext_x.x.x_Linux-x64.tar.gz` |
+
+**方式 B — 源码编译**
 
 ```bash
 git clone git@github.com:Claudate/mptext-cli.git
