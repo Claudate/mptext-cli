@@ -1,6 +1,6 @@
 name: Release
 
-# 推送 v* 标签或手动触发时，跨平台编译 mptext CLI 并上传到 GitHub Release。
+# 推送 v* 标签或手动触发时，构建 CLI + GUI 桌面应用并上传到 GitHub Release。
 on:
   push:
     tags:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "覆盖版本号（如 0.1.1）；留空则读取 Cargo.toml"
+        description: "覆盖版本号（如 0.2.0）；留空则读取 workspace Cargo.toml"
         required: false
         type: string
 
@@ -42,8 +42,8 @@ jobs:
           echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved release: ${TAG} (app version ${VER})"
 
-  build:
-    name: Build (${{ matrix.label }})
+  build-cli:
+    name: CLI (${{ matrix.label }})
     needs: resolve-version
     strategy:
       fail-fast: false
@@ -69,26 +69,26 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build CLI release binary
+        run: cargo build --release -p mptext-cli --target ${{ matrix.target }}
 
-      - name: Package (macOS)
+      - name: Package CLI (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
           VERSION="${{ needs.resolve-version.outputs.app_version }}"
-          NAME="mptext_${VERSION}_${{ matrix.label }}"
+          NAME="mptext-cli_${VERSION}_${{ matrix.label }}"
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/mptext" "dist/mptext"
           chmod +x "dist/mptext"
           (cd dist && zip -r "../${NAME}.zip" mptext)
           ls -la *.zip
 
-      - name: Package (Windows)
+      - name: Package CLI (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           $version = "${{ needs.resolve-version.outputs.app_version }}"
-          $name = "mptext_${version}_${{ matrix.label }}"
+          $name = "mptext-cli_${version}_${{ matrix.label }}"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/mptext.exe" "dist/mptext.exe"
           Copy-Item "packaging/windows/使用说明.txt" "dist/使用说明.txt"
@@ -96,15 +96,89 @@ jobs:
           Compress-Archive -Path "dist/*" -DestinationPath "${name}.zip" -Force
           Get-ChildItem *.zip
 
-      - name: Upload artifact
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mptext-${{ matrix.label }}
-          path: mptext_*.zip
+          name: cli-${{ matrix.label }}
+          path: mptext-cli_*.zip
+
+  build-gui:
+    name: GUI (${{ matrix.label }})
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            label: macOS-arm64
+            target: aarch64-apple-darwin
+          - platform: macos-latest
+            label: macOS-x64
+            target: x86_64-apple-darwin
+          - platform: windows-latest
+            label: Windows-x64
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend deps
+        working-directory: mptext-app
+        run: npm ci
+
+      - name: Build GUI app
+        working-directory: mptext-app
+        env:
+          CI: true
+        run: npm run tauri build -- --target ${{ matrix.target }}
+
+      - name: Package GUI (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.app_version }}"
+          NAME="mptext-gui_${VERSION}_${{ matrix.label }}"
+          APP_PATH=$(find target/${{ matrix.target }}/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "${NAME}.zip"
+          ls -la *.zip
+
+      - name: Package GUI (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve-version.outputs.app_version }}"
+          $name = "mptext-gui_${version}_${{ matrix.label }}"
+          $exe = Get-ChildItem -Path "target/${{ matrix.target }}/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          Copy-Item $exe.FullName "${name}.exe"
+          Get-ChildItem mptext-gui_*.exe
+
+      - name: Upload GUI artifact (macOS)
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.label }}
+          path: mptext-gui_*.zip
+
+      - name: Upload GUI artifact (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.label }}
+          path: mptext-gui_*.exe
 
   release:
     name: Publish Release
-    needs: [resolve-version, build]
+    needs: [resolve-version, build-cli, build-gui]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -122,7 +196,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-version.outputs.tag_name }}
-          name: mptext-cli ${{ needs.resolve-version.outputs.tag_name }}
+          name: mptext ${{ needs.resolve-version.outputs.tag_name }}
           draft: false
           generate_release_notes: true
           files: artifacts/**/*

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const DEFAULT_BASE: &str = "https://down.mptext.top";
@@ -12,7 +12,7 @@ pub struct MptextClient {
     auth_key: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArticleItem {
     pub title: String,
     pub url: String,
@@ -20,7 +20,7 @@ pub struct ArticleItem {
     pub create_time: Option<Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountItem {
     pub nickname: String,
     pub fakeid: String,
@@ -32,11 +32,11 @@ impl MptextClient {
     pub fn new(base_url: impl Into<String>, auth_key: impl Into<String>) -> Result<Self> {
         let auth_key = auth_key.into();
         if auth_key.trim().is_empty() {
-            bail!("API token 为空，请通过 --token 或环境变量 MPTEXT_AUTH_KEY 设置");
+            bail!("API token 为空");
         }
 
         let http = Client::builder()
-            .user_agent(format!("mptext-cli/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("mptext/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -45,6 +45,15 @@ impl MptextClient {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             auth_key,
         })
+    }
+
+    pub fn from_config(config: &crate::config::UserConfig) -> Result<Self> {
+        let base_url = config
+            .base_url
+            .clone()
+            .filter(|u| !u.trim().is_empty())
+            .unwrap_or_else(|| default_base_url().to_string());
+        Self::new(base_url, config.auth_key.clone())
     }
 
     fn url(&self, path: &str) -> String {
@@ -107,7 +116,6 @@ impl MptextClient {
         value
     }
 
-    /// 验证 API 密钥是否有效（code=0 有效，-1 过期）。
     pub async fn verify_auth(&self) -> Result<bool> {
         let value = self.get_json("/api/public/v1/authkey", &[]).await?;
         if let Some(code) = value.get("code").and_then(|c| c.as_i64()) {
@@ -116,7 +124,6 @@ impl MptextClient {
         Ok(true)
     }
 
-    /// 按关键词搜索公众号。
     pub async fn search_accounts(&self, keyword: &str) -> Result<Vec<AccountItem>> {
         let value = self
             .get_json(
@@ -129,7 +136,6 @@ impl MptextClient {
         parse_account_list(&data)
     }
 
-    /// 获取公众号文章列表（支持翻页 begin/size）。
     pub async fn list_articles(
         &self,
         fakeid: &str,
@@ -152,7 +158,6 @@ impl MptextClient {
         parse_article_list(&data)
     }
 
-    /// 下载单篇文章正文。
     pub async fn download_article(&self, url: &str, format: &str) -> Result<String> {
         let value = self
             .get_json(
@@ -188,7 +193,6 @@ impl MptextClient {
         Ok(value.to_string())
     }
 
-    /// 通过文章 URL 反查公众号信息。
     pub async fn account_by_url(&self, url: &str) -> Result<Value> {
         let value = self
             .get_json(

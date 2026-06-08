@@ -1,34 +1,15 @@
-mptext-cli 使用说明（Windows）
-================================
+mptext 公众号文章下载工具（Windows）
 
-【重要】不要直接双击 mptext.exe，会一闪而过。
-请双击「启动 mptext.bat」，或在 CMD/PowerShell 里运行命令。
+【推荐】双击运行 mptext-gui.exe — 图形界面，无需命令行。
 
-一、首次配置 Token
-------------------
-1. 打开 https://down.mptext.top 登录并复制 Auth Key
-2. 在本目录打开 CMD，执行：
-   mptext config set-token 你的密钥
-3. 验证：
-   mptext auth
+首次使用：
+1. 打开 https://down.mptext.top 登录并获取 Auth Key
+2. 在软件「设置」页粘贴密钥并保存
+3. 在「浏览下载」页搜索公众号，勾选文章后下载
 
-二、常用命令
-------------
-搜索公众号：
-  mptext search "公众号名称"
+命令行版（高级）：
+- 双击「启动 mptext.bat」或在 cmd 中运行 mptext.exe
+- 配置：mptext config set-token 你的密钥
+- 验证：mptext auth
 
-下载单篇：
-  mptext download "https://mp.weixin.qq.com/s/xxxx" -o article.md
-
-批量下载：
-  mptext fetch --fakeid Mzxxxx --limit 10 --output-dir articles
-
-三、配置文件位置
-----------------
-%APPDATA%\mptext\config.toml
-
-四、仍无法运行？
-----------------
-1. 若提示缺少 VCRUNTIME，请安装 Microsoft Visual C++ 运行库
-2. 在 CMD 中运行 mptext auth 查看完整错误信息
-3. GitHub Issues: https://github.com/Claudate/mptext-cli/issues
+配置文件位置：%APPDATA%\mptext\config.toml

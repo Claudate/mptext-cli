@@ -1,89 +1,72 @@
-# mptext-cli
+# mptext
 
-[mptext.top](https://down.mptext.top) 公众号文章 API 的命令行工具。支持搜索公众号、拉取文章列表、单篇/批量下载为 Markdown/HTML 等格式。
+[mptext.top](https://down.mptext.top) 公众号文章下载工具，提供 **图形界面桌面版** 与 **命令行版**，支持 Windows 与 macOS。
 
-### 安装
+## 桌面版（推荐）
 
-**方式 A — 下载预编译包（推荐）**
+图形界面，无需记命令：
 
-在 [Releases](https://github.com/Claudate/mptext-cli/releases) 下载对应平台包，解压后将 `mptext` 放入 PATH。
+- 设置页配置 / 验证 API 密钥
+- 搜索公众号并浏览文章列表（分页）
+- 勾选文章批量下载（Markdown / HTML / 纯文本）
+- 下载进度实时显示
+
+### 安装桌面版
+
+在 [Releases](https://github.com/Claudate/mptext-cli/releases) 下载：
 
 | 平台 | 文件 |
 |------|------|
-| macOS Apple Silicon | `mptext_x.x.x_macOS-arm64.zip` |
-| macOS Intel | `mptext_x.x.x_macOS-x64.zip` |
-| Windows | `mptext_x.x.x_Windows-x64.zip` |
+| macOS Apple Silicon | `mptext-gui_x.x.x_macOS-arm64.zip`（内含 `.app`） |
+| macOS Intel | `mptext-gui_x.x.x_macOS-x64.zip` |
+| Windows | `mptext-gui_x.x.x_Windows-x64.exe` |
 
-**方式 B — 源码编译**
+首次使用请在应用内「设置」页填入 Auth Key（在 [down.mptext.top](https://down.mptext.top) 登录获取）。
+
+### 本地开发桌面版
 
 ```bash
-git clone git@github.com:Claudate/mptext-cli.git
-cd mptext-cli
-cargo install --path .
-# 或: cargo build --release && cp target/release/mptext ~/.local/bin/
+cd mptext-app
+npm install
+npm run tauri dev
+```
+
+## 命令行版
+
+适合脚本自动化场景。
+
+| 平台 | 文件 |
+|------|------|
+| macOS Apple Silicon | `mptext-cli_x.x.x_macOS-arm64.zip` |
+| macOS Intel | `mptext-cli_x.x.x_macOS-x64.zip` |
+| Windows | `mptext-cli_x.x.x_Windows-x64.zip` |
+
+```bash
+cargo build --release -p mptext-cli
+# 二进制位于 target/release/mptext
 ```
 
 ## 配置 Token（必填）
 
-在 [down.mptext.top](https://down.mptext.top) 登录后获取 **Auth Key**，任选一种方式配置：
-
 ```bash
-# 方式 1：环境变量（推荐）
-export MPTEXT_AUTH_KEY="你的密钥"
-
-# 方式 2：每次命令行传入
-mptext --token "你的密钥" auth
-```
-
-验证密钥：
-
-```bash
+# 桌面版：应用内「设置」页保存
+# CLI：
+mptext config set-token "你的密钥"
 mptext auth
-# 输出「API 密钥有效」即 OK
 ```
 
-## 用法
+配置文件路径：
 
-### 搜索公众号
+- Windows：`%APPDATA%/mptext/config.toml`
+- macOS：`~/.config/mptext/config.toml`
 
-```bash
-mptext search "作者昵称"
-# 输出: 昵称\tfakeid
+## 项目结构
+
 ```
-
-### 查看文章列表
-
-```bash
-mptext articles --fakeid MzAxxxx --size 20
+crates/mptext-core/   # API 客户端与配置（CLI/GUI 共用）
+crates/mptext-cli/    # 命令行工具
+mptext-app/           # Tauri 2 桌面应用
 ```
-
-### 下载单篇
-
-```bash
-mptext download "https://mp.weixin.qq.com/s/xxxx" -o article.md
-# format: markdown(默认) | html | text | json
-mptext download "https://mp.weixin.qq.com/s/xxxx" --format html -o article.html
-```
-
-### 批量下载
-
-```bash
-mptext fetch --fakeid MzAxxxx --limit 10 --output-dir ./articles
-```
-
-### 通过文章 URL 反查公众号
-
-```bash
-mptext account "https://mp.weixin.qq.com/s/xxxx"
-```
-
-## 与 Write-T 配合
-
-下载的 `.md` 可直接粘贴到 Write-T **文章导入**，或配合 Write-T 的语料清洗/切块预览。
-
-## API 说明
-
-默认请求 `https://down.mptext.top`，可通过全局参数 `--base-url` 覆盖（私有化部署时使用）。
 
 ## License
 

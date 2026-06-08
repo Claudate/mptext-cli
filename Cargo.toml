@@ -1,21 +1,23 @@
-[package]
-name = "mptext-cli"
-version = "0.1.2"
+[workspace]
+resolver = "2"
+members = [
+    "crates/mptext-core",
+    "crates/mptext-cli",
+    "mptext-app/src-tauri",
+]
+
+[workspace.package]
+version = "0.2.0"
 edition = "2021"
-description = "CLI for mptext.top WeChat article API (search, list, download)"
 license = "MIT"
 
-[[bin]]
-name = "mptext"
-path = "src/main.rs"
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 [profile.release]
 strip = true

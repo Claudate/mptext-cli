@@ -1,6 +1,5 @@
 use std::io::{self, IsTerminal, Write};
 
-/// Windows 双击 exe 时控制台会随进程退出立刻关闭；在交互场景暂停以便用户看到输出。
 pub fn pause_before_exit_if_needed(exit_code: i32) {
     if !should_pause() {
         return;
@@ -27,7 +26,6 @@ fn should_pause() -> bool {
     if std::env::var("CI").is_ok() {
         return false;
     }
-    // 有管道/重定向时不暂停
     if !io::stdin().is_terminal() {
         return false;
     }
@@ -35,7 +33,7 @@ fn should_pause() -> bool {
 }
 
 pub fn print_welcome() {
-    println!("mptext-cli — mptext.top 公众号文章下载工具");
+    println!("mptext — mptext.top 公众号文章下载工具");
     println!();
     println!("首次使用请先配置 API 密钥（在 https://down.mptext.top 登录后获取）：");
     println!("  mptext config set-token <你的密钥>");
@@ -47,4 +45,6 @@ pub fn print_welcome() {
     println!("  mptext fetch --fakeid <fakeid> --limit 10");
     println!();
     println!("完整帮助: mptext --help");
+    println!();
+    println!("提示：也可使用图形界面版本 mptext 桌面应用");
 }

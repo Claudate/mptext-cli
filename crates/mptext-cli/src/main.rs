@@ -1,13 +1,13 @@
-mod client;
-mod config;
 mod platform;
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use client::{ArticleItem, MptextClient, default_base_url};
-use config::{load_config, save_config};
+use mptext_core::{
+    ArticleItem, MptextClient, config_path, default_base_url, load_config, safe_filename,
+    save_config, write_file,
+};
 use platform::{pause_before_exit_if_needed, print_welcome};
 use tokio::time::{Duration, sleep};
 
@@ -19,11 +19,9 @@ use tokio::time::{Duration, sleep};
     arg_required_else_help = false
 )]
 struct Cli {
-    /// API 密钥（也可设环境变量 MPTEXT_AUTH_KEY 或 config set-token）
     #[arg(short, long, env = "MPTEXT_AUTH_KEY", global = true)]
     token: Option<String>,
 
-    /// API 基础地址
     #[arg(long, global = true)]
     base_url: Option<String>,
 
@@ -33,13 +31,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 验证 API 密钥是否有效
     Auth,
-    /// 按关键词搜索公众号
-    Search {
-        keyword: String,
-    },
-    /// 获取公众号文章列表
+    Search { keyword: String },
     Articles {
         #[arg(short, long)]
         fakeid: String,
@@ -50,7 +43,6 @@ enum Commands {
         #[arg(short, long)]
         keyword: Option<String>,
     },
-    /// 下载单篇文章
     Download {
         url: String,
         #[arg(short, long, default_value = "markdown")]
@@ -58,11 +50,7 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// 通过文章 URL 反查公众号信息
-    Account {
-        url: String,
-    },
-    /// 批量抓取：拉列表 + 逐篇下载到目录
+    Account { url: String },
     Fetch {
         #[arg(short, long)]
         fakeid: String,
@@ -75,7 +63,6 @@ enum Commands {
         #[arg(short, long, default_value_t = 1.0)]
         interval: f64,
     },
-    /// 管理本地配置（token 持久化）
     Config {
         #[command(subcommand)]
         action: ConfigCommands,
@@ -84,11 +71,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum ConfigCommands {
-    /// 保存 API 密钥到本地配置文件
-    SetToken {
-        token: String,
-    },
-    /// 显示配置文件路径与当前状态
+    SetToken { token: String },
     Show,
 }
 
@@ -213,7 +196,7 @@ async fn handle_config(action: &ConfigCommands) -> Result<()> {
             println!("运行 mptext auth 验证是否有效");
         }
         ConfigCommands::Show => {
-            let path = config::config_path()?;
+            let path = config_path()?;
             let cfg = load_config().unwrap_or_default();
             println!("配置文件: {}", path.display());
             println!(
@@ -297,40 +280,6 @@ fn print_articles(articles: &[ArticleItem]) {
             .unwrap_or_else(|| "-".to_string());
         println!("{}. [{}] {}\n   {}", i + 1, ts, article.title, article.url);
     }
-}
-
-fn safe_filename(title: &str, format: &str) -> String {
-    let ext = match format {
-        "html" => "html",
-        "text" => "txt",
-        "json" => "json",
-        _ => "md",
-    };
-    let mut name: String = title
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    name = name.trim().to_string();
-    if name.chars().count() > 80 {
-        name = name.chars().take(80).collect();
-    }
-    if name.is_empty() {
-        name = "untitled".to_string();
-    }
-    format!("{name}.{ext}")
-}
-
-fn write_file(path: &Path, content: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))
 }
 
 fn main() {

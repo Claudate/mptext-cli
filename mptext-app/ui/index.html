@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mptext — 公众号文章下载</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M7 9h10M7 12h7M7 15h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <div>
+            <h1>mptext</h1>
+            <p>公众号文章下载桌面版</p>
+          </div>
+        </div>
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-tab="search" role="tab">搜索下载</button>
+          <button class="tab" data-tab="settings" role="tab">设置</button>
+        </nav>
+      </header>
+
+      <main>
+        <section id="panel-search" class="panel active">
+          <div class="toolbar">
+            <input id="keyword" type="search" placeholder="输入公众号名称或关键词" />
+            <button id="btn-search" class="primary">搜索公众号</button>
+          </div>
+
+          <div class="workspace">
+            <aside class="accounts-pane">
+              <div class="pane-head">
+                <h2>公众号列表</h2>
+                <span id="account-count" class="badge">0</span>
+              </div>
+              <ul id="account-list" class="list"></ul>
+            </aside>
+
+            <section class="articles-pane">
+              <div class="pane-head">
+                <h2 id="article-pane-title">文章列表</h2>
+                <div class="pager">
+                  <button id="btn-prev" class="ghost" disabled>上一页</button>
+                  <span id="page-info">第 1 页</span>
+                  <button id="btn-next" class="ghost" disabled>下一页</button>
+                </div>
+              </div>
+              <div id="article-list" class="article-grid"></div>
+            </section>
+          </div>
+
+          <footer class="download-bar">
+            <div class="download-controls">
+              <label>
+                格式
+                <select id="format">
+                  <option value="markdown">Markdown</option>
+                  <option value="html">HTML</option>
+                  <option value="text">纯文本</option>
+                </select>
+              </label>
+              <label>
+                间隔(秒)
+                <input id="interval" type="number" min="0" max="10" step="0.5" value="1" />
+              </label>
+              <button id="btn-pick-dir" class="ghost">选择保存目录</button>
+              <span id="output-dir" class="dir-label">未选择目录</span>
+              <button id="btn-download" class="primary" disabled>下载选中 (0)</button>
+            </div>
+            <div class="progress-wrap hidden" id="progress-wrap">
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+              <p id="progress-text">准备下载…</p>
+            </div>
+          </footer>
+        </section>
+
+        <section id="panel-settings" class="panel">
+          <div class="settings-card">
+            <h2>API 密钥设置</h2>
+            <p class="hint">在 <a href="#" id="link-site">down.mptext.top</a> 登录后获取 Auth Key</p>
+            <label class="field">
+              <span>Auth Key</span>
+              <input id="auth-key" type="password" placeholder="粘贴你的 API 密钥" autocomplete="off" />
+            </label>
+            <div class="settings-actions">
+              <button id="btn-save-auth" class="primary">保存密钥</button>
+              <button id="btn-verify-auth" class="ghost">验证有效性</button>
+            </div>
+            <div id="settings-status" class="status-box">加载中…</div>
+          </div>
+        </section>
+      </main>
+
+      <div id="toast" class="toast hidden"></div>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>

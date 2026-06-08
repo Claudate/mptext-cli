@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct UserConfig {
     #[serde(default)]
     pub auth_key: String,
@@ -70,8 +70,7 @@ fn parse_config_toml(text: &str) -> Result<UserConfig> {
 
 fn serialize_config_toml(config: &UserConfig) -> Result<String> {
     let mut lines = vec![
-        "# mptext-cli 用户配置".to_string(),
-        "# 可用 mptext config set-token 写入".to_string(),
+        "# mptext 用户配置".to_string(),
         format!("auth_key = \"{}\"", escape_toml(&config.auth_key)),
     ];
     if let Some(url) = &config.base_url {

@@ -1,0 +1,17 @@
+[package]
+name = "mptext-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for mptext.top WeChat article API (search, list, download)"
+
+[[bin]]
+name = "mptext"
+path = "src/main.rs"
+
+[dependencies]
+mptext-core = { path = "../mptext-core" }
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
