@@ -36,7 +36,14 @@
             <aside class="accounts-pane">
               <div class="pane-head">
                 <h2>公众号列表</h2>
-                <span id="account-count" class="badge">0</span>
+                <div class="pane-head-right">
+                  <span id="account-count" class="badge">0</span>
+                  <button id="btn-clear-accounts" class="icon-btn" title="清空记忆的公众号">
+                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                      <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
               <ul id="account-list" class="list"></ul>
             </aside>
@@ -44,11 +51,29 @@
             <section class="articles-pane">
               <div class="pane-head">
                 <h2 id="article-pane-title">文章列表</h2>
-                <div class="pager">
-                  <button id="btn-prev" class="ghost" disabled>上一页</button>
-                  <span id="page-info">第 1 页</span>
-                  <button id="btn-next" class="ghost" disabled>下一页</button>
+                <div class="pane-head-right">
+                  <button id="btn-fetch-all" class="ghost" disabled title="仅抓取全部历史文章并默认全选，不立即下载">仅抓取</button>
+                  <label class="select-all">
+                    <input type="checkbox" id="check-all" />
+                    <span>全选</span>
+                  </label>
+                  <div class="pager">
+                    <button id="btn-prev" class="ghost" disabled>上一页</button>
+                    <span id="page-info">第 1 页</span>
+                    <button id="btn-next" class="ghost" disabled>下一页</button>
+                  </div>
                 </div>
+              </div>
+              <div id="progress-panel" class="progress-panel hidden">
+                <div class="progress-head">
+                  <div class="progress-spinner" id="progress-spinner"></div>
+                  <span id="progress-phase" class="progress-phase">就绪</span>
+                  <span id="progress-counter" class="progress-counter"></span>
+                </div>
+                <div class="progress-track">
+                  <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="progress-detail" class="progress-detail"></div>
               </div>
               <div id="article-list" class="article-grid"></div>
             </section>
@@ -68,15 +93,17 @@
                 间隔(秒)
                 <input id="interval" type="number" min="0" max="10" step="0.5" value="1" />
               </label>
-              <button id="btn-pick-dir" class="ghost">选择保存目录</button>
+              <button id="btn-pick-dir" class="ghost">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                选择保存目录
+              </button>
               <span id="output-dir" class="dir-label">未选择目录</span>
-              <button id="btn-download" class="primary" disabled>下载选中 (0)</button>
-            </div>
-            <div class="progress-wrap hidden" id="progress-wrap">
-              <div class="progress-track">
-                <div class="progress-fill" id="progress-fill"></div>
-              </div>
-              <p id="progress-text">准备下载…</p>
+              <span class="ctrl-spacer"></span>
+              <button id="btn-download" class="ghost" disabled title="只下载当前勾选的文章">下载选中 (0)</button>
+              <button id="btn-auto" class="primary auto-main" disabled title="自动抓取该公众号全部文章并立即下载，中途无需操作">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v10m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                一键下载全部
+              </button>
             </div>
           </footer>
         </section>
@@ -92,6 +119,7 @@
             <div class="settings-actions">
               <button id="btn-save-auth" class="primary">保存密钥</button>
               <button id="btn-verify-auth" class="ghost">验证有效性</button>
+              <button id="btn-clear-auth" class="ghost danger-ghost">清除记忆</button>
             </div>
             <div id="settings-status" class="status-box">加载中…</div>
           </div>

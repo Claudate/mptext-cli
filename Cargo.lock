@@ -1888,7 +1888,7 @@ dependencies = [
 
 [[package]]
 name = "mptext-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "mptext-core",
@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "mptext-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "mptext-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "reqwest 0.12.28",

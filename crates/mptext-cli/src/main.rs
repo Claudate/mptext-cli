@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mptext_core::{
     ArticleItem, MptextClient, config_path, default_base_url, load_config, safe_filename,
-    save_config, write_file,
+    save_config, unique_path, write_file,
 };
 use platform::{pause_before_exit_if_needed, print_welcome};
 use tokio::time::{Duration, sleep};
@@ -56,7 +56,7 @@ enum Commands {
         fakeid: String,
         #[arg(short, long, default_value_t = 5)]
         limit: u32,
-        #[arg(short, long, default_value = "markdown")]
+        #[arg(long, default_value = "markdown")]
         format: String,
         #[arg(short, long, default_value = "output")]
         output_dir: PathBuf,
@@ -261,7 +261,7 @@ async fn fetch_batch(
 
         let content = client.download_article(&article.url, format).await?;
         let filename = safe_filename(&article.title, format);
-        let path = output_dir.join(filename);
+        let path = unique_path(output_dir, &filename);
         write_file(&path, &content)?;
         println!("[{}] {}", idx + 1, path.display());
         saved += 1;

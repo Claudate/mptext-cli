@@ -11,7 +11,8 @@ pub struct UserConfig {
     pub base_url: Option<String>,
 }
 
-pub fn config_path() -> Result<PathBuf> {
+/// 配置目录（跨平台）：Win=%APPDATA%/mptext，Mac=~/.config/mptext
+fn config_dir() -> Result<PathBuf> {
     let base = if cfg!(windows) {
         std::env::var("APPDATA")
             .map(PathBuf::from)
@@ -20,7 +21,54 @@ pub fn config_path() -> Result<PathBuf> {
     } else {
         dirs_fallback()?.join("mptext")
     };
-    Ok(base.join("config.toml"))
+    Ok(base)
+}
+
+pub fn config_path() -> Result<PathBuf> {
+    Ok(config_dir()?.join("config.toml"))
+}
+
+/// 公众号记忆缓存文件路径（独立 JSON，不影响 token 配置）
+pub fn accounts_cache_path() -> Result<PathBuf> {
+    Ok(config_dir()?.join("accounts.json"))
+}
+
+/// 读取已记忆的公众号列表（文件不存在或损坏时返回空列表，保证健壮）
+pub fn load_accounts() -> Vec<crate::client::AccountItem> {
+    let path = match accounts_cache_path() {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+    if !path.exists() {
+        return Vec::new();
+    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// 保存公众号记忆列表到本地
+pub fn save_accounts(accounts: &[crate::client::AccountItem]) -> Result<PathBuf> {
+    let path = accounts_cache_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let text = serde_json::to_string_pretty(accounts)
+        .context("序列化公众号缓存失败")?;
+    std::fs::write(&path, text)
+        .with_context(|| format!("写入公众号缓存失败: {}", path.display()))?;
+    Ok(path)
+}
+
+/// 清空公众号记忆
+pub fn clear_accounts() -> Result<()> {
+    let path = accounts_cache_path()?;
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .with_context(|| format!("删除公众号缓存失败: {}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn dirs_fallback() -> Result<PathBuf> {

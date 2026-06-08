@@ -15,6 +15,8 @@ pub struct MptextClient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArticleItem {
     pub title: String,
+    // mptext API 文章链接字段名为 link；兼容 url 写法
+    #[serde(alias = "link")]
     pub url: String,
     #[serde(default)]
     pub create_time: Option<Value>,
@@ -26,6 +28,9 @@ pub struct AccountItem {
     pub fakeid: String,
     #[serde(default)]
     pub alias: Option<String>,
+    /// 是否被用户收藏（仅本地记忆使用，API 返回不含此字段）
+    #[serde(default)]
+    pub favorite: bool,
 }
 
 impl MptextClient {
@@ -60,7 +65,7 @@ impl MptextClient {
         format!("{}{}", self.base_url, path)
     }
 
-    async fn get_json(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
+    async fn get_text(&self, path: &str, query: &[(&str, String)]) -> Result<String> {
         let response = self
             .http
             .get(self.url(path))
@@ -79,11 +84,27 @@ impl MptextClient {
         if !status.is_success() {
             bail!("HTTP {status} — {body}");
         }
+        Ok(body)
+    }
 
+    async fn get_json(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
+        let body = self.get_text(path, query).await?;
         serde_json::from_str(&body).with_context(|| format!("解析 JSON 失败: {body}"))
     }
 
+    /// 校验 API 业务返回码。真实 mptext API 用 base_resp.ret（0=成功），
+    /// 同时兼容部分接口的 code 字段。
     fn ensure_api_ok(value: &Value) -> Result<()> {
+        if let Some(base) = value.get("base_resp") {
+            let ret = base.get("ret").and_then(|c| c.as_i64()).unwrap_or(0);
+            if ret != 0 {
+                let msg = base
+                    .get("err_msg")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("未知错误");
+                bail!("API 错误 (ret={ret}): {msg}");
+            }
+        }
         if let Some(code) = value.get("code").and_then(|c| c.as_i64()) {
             if code != 0 {
                 let msg = value
@@ -100,6 +121,13 @@ impl MptextClient {
     fn unwrap_data(value: Value) -> Value {
         if value.is_array() {
             return value;
+        }
+        // 顶层直接挂列表字段（mptext API 真实结构：{base_resp, list/articles, total}）
+        if let Some(list) = value.get("list").filter(|v| v.is_array()).cloned() {
+            return list;
+        }
+        if let Some(articles) = value.get("articles").filter(|v| v.is_array()).cloned() {
+            return articles;
         }
         if let Some(data) = value.get("data").cloned() {
             if data.is_array() {
@@ -118,6 +146,13 @@ impl MptextClient {
 
     pub async fn verify_auth(&self) -> Result<bool> {
         let value = self.get_json("/api/public/v1/authkey", &[]).await?;
+        if let Some(ret) = value
+            .get("base_resp")
+            .and_then(|b| b.get("ret"))
+            .and_then(|c| c.as_i64())
+        {
+            return Ok(ret == 0);
+        }
         if let Some(code) = value.get("code").and_then(|c| c.as_i64()) {
             return Ok(code == 0);
         }
@@ -159,38 +194,39 @@ impl MptextClient {
     }
 
     pub async fn download_article(&self, url: &str, format: &str) -> Result<String> {
-        let value = self
-            .get_json(
+        // mptext download 接口直接返回正文文本（text/markdown|html|plain），
+        // 并非 JSON。先取原始文本，仅在确为 JSON 包装时才提取 content 字段。
+        let body = self
+            .get_text(
                 "/api/public/v1/download",
-                &[
-                    ("url", url.to_string()),
-                    ("format", format.to_string()),
-                ],
+                &[("url", url.to_string()), ("format", format.to_string())],
             )
             .await?;
 
-        if value.is_string() {
-            return Ok(value.as_str().unwrap_or_default().to_string());
+        let trimmed = body.trim_start();
+        if trimmed.starts_with('{') || trimmed.starts_with('[') {
+            if let Ok(value) = serde_json::from_str::<Value>(&body) {
+                // 若是错误响应（base_resp.ret != 0 等），抛出真实错误
+                Self::ensure_api_ok(&value)?;
+
+                if let Some(content) = value.get("content").and_then(|c| c.as_str()) {
+                    return Ok(content.to_string());
+                }
+                if let Some(data) = value.get("data") {
+                    if let Some(content) = data.as_str() {
+                        return Ok(content.to_string());
+                    }
+                    if let Some(content) = data.get("content").and_then(|c| c.as_str()) {
+                        return Ok(content.to_string());
+                    }
+                    if let Some(markdown) = data.get("markdown").and_then(|c| c.as_str()) {
+                        return Ok(markdown.to_string());
+                    }
+                }
+            }
         }
 
-        Self::ensure_api_ok(&value)?;
-
-        if let Some(content) = value.get("content").and_then(|c| c.as_str()) {
-            return Ok(content.to_string());
-        }
-        if let Some(data) = value.get("data") {
-            if let Some(content) = data.as_str() {
-                return Ok(content.to_string());
-            }
-            if let Some(content) = data.get("content").and_then(|c| c.as_str()) {
-                return Ok(content.to_string());
-            }
-            if let Some(markdown) = data.get("markdown").and_then(|c| c.as_str()) {
-                return Ok(markdown.to_string());
-            }
-        }
-
-        Ok(value.to_string())
+        Ok(body)
     }
 
     pub async fn account_by_url(&self, url: &str) -> Result<Value> {
