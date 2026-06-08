@@ -1,29 +1,34 @@
 mod client;
+mod config;
+mod platform;
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use client::{ArticleItem, MptextClient, default_base_url};
+use config::{load_config, save_config};
+use platform::{pause_before_exit_if_needed, print_welcome};
 use tokio::time::{Duration, sleep};
 
 #[derive(Parser)]
 #[command(
     name = "mptext",
     about = "mptext.top 公众号文章 API 命令行工具",
-    version
+    version,
+    arg_required_else_help = false
 )]
 struct Cli {
-    /// API 密钥（也可设环境变量 MPTEXT_AUTH_KEY）
+    /// API 密钥（也可设环境变量 MPTEXT_AUTH_KEY 或 config set-token）
     #[arg(short, long, env = "MPTEXT_AUTH_KEY", global = true)]
     token: Option<String>,
 
     /// API 基础地址
-    #[arg(long, default_value = default_base_url(), global = true)]
-    base_url: String,
+    #[arg(long, global = true)]
+    base_url: Option<String>,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -70,19 +75,72 @@ enum Commands {
         #[arg(short, long, default_value_t = 1.0)]
         interval: f64,
     },
+    /// 管理本地配置（token 持久化）
+    Config {
+        #[command(subcommand)]
+        action: ConfigCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// 保存 API 密钥到本地配置文件
+    SetToken {
+        token: String,
+    },
+    /// 显示配置文件路径与当前状态
+    Show,
+}
+
+fn resolve_credentials(cli: &Cli) -> Result<(String, String)> {
+    let file_cfg = load_config().unwrap_or_default();
+
+    let token = cli
+        .token
+        .clone()
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            if !file_cfg.auth_key.trim().is_empty() {
+                Some(file_cfg.auth_key.clone())
+            } else {
+                None
+            }
+        })
+        .context(
+            "缺少 API token。\n\
+             请任选一种方式配置：\n\
+             1) mptext config set-token <密钥>\n\
+             2) set MPTEXT_AUTH_KEY=密钥（Windows CMD）\n\
+             3) mptext --token 密钥 auth",
+        )?;
+
+    let base_url = cli
+        .base_url
+        .clone()
+        .filter(|u| !u.trim().is_empty())
+        .or(file_cfg.base_url)
+        .unwrap_or_else(|| default_base_url().to_string());
+
+    Ok((token, base_url))
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn run() -> Result<()> {
     let cli = Cli::parse();
-    let token = cli
-        .token
-        .filter(|t| !t.trim().is_empty())
-        .context("缺少 API token：使用 --token 或设置 MPTEXT_AUTH_KEY")?;
 
-    let client = MptextClient::new(cli.base_url, token)?;
+    match cli.command.as_ref() {
+        None => {
+            print_welcome();
+            return Ok(());
+        }
+        Some(Commands::Config { action }) => return handle_config(action).await,
+        _ => {}
+    }
 
-    match cli.command {
+    let (token, base_url) = resolve_credentials(&cli)?;
+    let client = MptextClient::new(base_url, token)?;
+
+    match cli.command.expect("checked above") {
         Commands::Auth => {
             let ok = client.verify_auth().await?;
             if ok {
@@ -136,8 +194,41 @@ async fn main() -> Result<()> {
         } => {
             fetch_batch(&client, &fakeid, limit, &format, &output_dir, interval).await?;
         }
+        Commands::Config { .. } => unreachable!(),
     }
 
+    Ok(())
+}
+
+async fn handle_config(action: &ConfigCommands) -> Result<()> {
+    match action {
+        ConfigCommands::SetToken { token } => {
+            if token.trim().is_empty() {
+                anyhow::bail!("token 不能为空");
+            }
+            let mut cfg = load_config().unwrap_or_default();
+            cfg.auth_key = token.trim().to_string();
+            let path = save_config(&cfg)?;
+            println!("已保存 API 密钥 → {}", path.display());
+            println!("运行 mptext auth 验证是否有效");
+        }
+        ConfigCommands::Show => {
+            let path = config::config_path()?;
+            let cfg = load_config().unwrap_or_default();
+            println!("配置文件: {}", path.display());
+            println!(
+                "  auth_key: {}",
+                if cfg.auth_key.is_empty() {
+                    "未设置".to_string()
+                } else {
+                    format!("已设置 ({} 字符)", cfg.auth_key.len())
+                }
+            );
+            if let Some(url) = cfg.base_url {
+                println!("  base_url: {url}");
+            }
+        }
+    }
     Ok(())
 }
 
@@ -240,4 +331,16 @@ fn write_file(path: &Path, content: &str) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))
+}
+
+fn main() {
+    let exit_code = match run() {
+        Ok(()) => 0,
+        Err(err) => {
+            eprintln!("错误: {err:#}");
+            1
+        }
+    };
+    pause_before_exit_if_needed(exit_code);
+    std::process::exit(exit_code);
 }

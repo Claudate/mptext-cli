@@ -102,7 +102,9 @@ jobs:
           $name = "mptext_${version}_${{ matrix.label }}"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/mptext.exe" "dist/mptext.exe"
-          Compress-Archive -Path "dist/mptext.exe" -DestinationPath "${name}.zip" -Force
+          Copy-Item "packaging/windows/使用说明.txt" "dist/使用说明.txt"
+          Copy-Item "packaging/windows/启动 mptext.bat" "dist/启动 mptext.bat"
+          Compress-Archive -Path "dist/*" -DestinationPath "${name}.zip" -Force
           Get-ChildItem *.zip
 
       - name: Upload artifact
