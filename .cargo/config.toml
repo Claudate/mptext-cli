@@ -1,0 +1,7 @@
+# 本机直连 index.crates.io 会被 TLS 中断（LibreSSL SSL_ERROR_SYSCALL），
+# 统一走 rsproxy 稀疏索引。
+[source.crates-io]
+replace-with = "rsproxy"
+
+[source.rsproxy]
+registry = "sparse+https://rsproxy.cn/index/"

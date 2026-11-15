@@ -1,7 +1,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 const state = {
   accounts: [],
@@ -9,6 +9,9 @@ const state = {
   articles: [],
   pageBegin: 0,
   selectedUrls: new Set(),
+  // 见过的文章按 url 索引：分页浏览时只拿得到当前页，
+  // 跨页勾选要下载就必须靠它把别页选中的文章找回来
+  articleIndex: new Map(),
   outputDir: "",
   fetchedAll: false,
   busy: false,
@@ -158,17 +161,23 @@ function renderArticles() {
   }
 
   if (state.articles.length === 0) {
-    grid.innerHTML = '<div class="empty">该页暂无文章</div>';
+    grid.innerHTML = state.fetchedAll
+      ? '<div class="empty">该公众号暂无可下载的文章</div>'
+      : '<div class="empty">该页暂无文章</div>';
     return;
   }
 
   state.articles.forEach((article, idx) => {
     const row = document.createElement("div");
+    // 分页浏览时序号接全局偏移，别每页都从 #1 重来
+    const seq = (state.fetchedAll ? 0 : state.pageBegin) + idx + 1;
     row.className = "article-item";
     row.dataset.rowUrl = article.url;
     const checked = state.selectedUrls.has(article.url);
+    // 每页渲染时都把文章存进索引，跨页下载才有完整对象
+    state.articleIndex.set(article.url, article);
     const time = formatArticleTime(article.create_time);
-    const metaParts = [`#${idx + 1}`];
+    const metaParts = [`#${seq}`];
     if (time) metaParts.push(time);
     row.innerHTML = `
       <input type="checkbox" class="article-check" data-url="${escapeAttr(article.url)}" ${checked ? "checked" : ""} />
@@ -313,12 +322,12 @@ function updatePager() {
 
 function renderSettingsStatus(info) {
   const box = $("settings-status");
-  const memo = info.auth_key_set
-    ? `<span class="ok-dot"></span>Token 已记忆（${info.auth_key_len} 字符），下次打开自动加载`
-    : `<span class="warn-dot"></span>尚未保存 Token`;
+  const who = info.nickname ? `：${escapeHtml(info.nickname)}` : "";
+  const memo = info.logged_in
+    ? `<span class="ok-dot"></span>已登录${who}，下次打开自动使用`
+    : `<span class="warn-dot"></span>尚未登录`;
   const lines = [`<div class="memo-line">${memo}</div>`];
-  lines.push(`<div class="path-line">配置文件：${escapeHtml(info.config_path)}</div>`);
-  if (info.base_url) lines.push(`<div class="path-line">API 地址：${escapeHtml(info.base_url)}</div>`);
+  lines.push(`<div class="path-line">会话文件：${escapeHtml(info.session_path || "")}</div>`);
   box.innerHTML = lines.join("");
 }
 
@@ -348,17 +357,19 @@ async function selectAccount(account) {
   state.pageBegin = 0;
   state.fetchedAll = false;
   state.selectedUrls.clear();
+  state.articleIndex.clear();
   $("article-pane-title").textContent = `${account.nickname} — 文章列表`;
   renderAccounts();
   updateDownloadButton();
   await loadArticles();
 }
 
+/// 加载当前页。返回 true 表示成功；调用方据此决定失败时要不要回滚偏移。
 async function loadArticles() {
-  if (!state.selectedAccount) return;
+  if (!state.selectedAccount) return false;
   try {
     state.fetchedAll = false;
-    state.selectedUrls.clear();
+    // 不清空 selectedUrls：勾选要能跨页保留，否则翻一页就丢掉之前选的
     state.articles = await invoke("list_articles", {
       payload: {
         fakeid: state.selectedAccount.fakeid,
@@ -368,8 +379,19 @@ async function loadArticles() {
     });
     renderArticles();
     updatePager();
+    return true;
   } catch (err) {
+    // 失败必须看得见：否则界面停在上页，用户会以为「下一页」按钮没反应
+    $("page-info").textContent = "加载失败";
+    $("page-info").title = String(err);
+    const grid = $("article-list");
+    grid.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "empty";
+    box.textContent = `加载失败：${String(err)}`;
+    grid.appendChild(box);
     showToast(String(err), "error");
+    return false;
   }
 }
 
@@ -387,6 +409,7 @@ async function searchAccounts() {
     state.pageBegin = 0;
     state.fetchedAll = false;
     state.selectedUrls.clear();
+    state.articleIndex.clear();
     renderAccounts();
     renderArticles();
     updatePager();
@@ -462,7 +485,10 @@ function finishDownloadProgress(saved, failedCount) {
 }
 
 async function downloadSelected() {
-  const selected = state.articles.filter((a) => state.selectedUrls.has(a.url));
+  // 按 url 从全量索引取，而不是只筛当前页的 state.articles
+  const selected = [...state.selectedUrls]
+    .map((url) => state.articleIndex.get(url))
+    .filter(Boolean);
   if (selected.length === 0) return;
   if (!state.outputDir) {
     showToast("请先选择保存目录", "error");
@@ -572,6 +598,8 @@ async function fetchAllArticles() {
     });
     state.articles = Array.isArray(articles) ? articles : [];
     state.fetchedAll = true;
+    state.articleIndex.clear();
+    state.articles.forEach((a) => state.articleIndex.set(a.url, a));
     // 抓取成功的全部默认选中（后端已过滤无效条目）
     state.selectedUrls = new Set(state.articles.map((a) => a.url));
     renderArticles();
@@ -618,14 +646,27 @@ $("keyword").addEventListener("keydown", (e) => {
   if (e.key === "Enter") searchAccounts();
 });
 
+/**
+ * 翻页：先挪偏移再取，取失败就把偏移退回去。
+ * 不回滚的话一次失败会让 pageBegin 永久跑偏，之后每点一次都多跳过一页。
+ */
+async function turnPage(delta) {
+  if (!state.selectedAccount || state.busy) return;
+  const previous = state.pageBegin;
+  state.pageBegin = Math.max(0, previous + delta * PAGE_SIZE);
+  const ok = await loadArticles();
+  if (!ok) {
+    state.pageBegin = previous;
+    updatePager();
+  }
+}
+
 $("btn-prev").addEventListener("click", async () => {
-  state.pageBegin = Math.max(0, state.pageBegin - PAGE_SIZE);
-  await loadArticles();
+  await turnPage(-1);
 });
 
 $("btn-next").addEventListener("click", async () => {
-  state.pageBegin += PAGE_SIZE;
-  await loadArticles();
+  await turnPage(1);
 });
 
 $("btn-pick-dir").addEventListener("click", pickOutputDir);
@@ -634,24 +675,32 @@ $("btn-auto").addEventListener("click", autoDownloadAll);
 $("btn-fetch-all").addEventListener("click", fetchAllArticles);
 $("check-all").addEventListener("change", (e) => toggleSelectAll(e.target.checked));
 
-$("btn-save-auth").addEventListener("click", async () => {
-  const authKey = $("auth-key").value.trim();
+$("btn-login").addEventListener("click", async () => {
+  const btn = $("btn-login");
+  btn.disabled = true;
+  $("login-status").textContent = "正在向微信申请二维码…";
   try {
-    const info = await invoke("save_auth_key", { payload: { auth_key: authKey } });
-    showToast("密钥已保存，已永久记忆", "success");
+    const info = await invoke("start_login");
     renderSettingsStatus(info);
-    $("auth-key").value = "";
+    const who = info.nickname ? `：${info.nickname}` : "";
+    $("login-status").textContent = `登录成功${who}`;
+    showToast("登录成功，会话已保存在本机", "success");
   } catch (err) {
+    $("login-status").textContent = String(err);
     showToast(String(err), "error");
+  } finally {
+    btn.disabled = false;
   }
 });
 
 $("btn-clear-auth").addEventListener("click", async () => {
   try {
-    const info = await invoke("clear_auth_key");
-    showToast("已清除记忆的 Token", "success");
+    const info = await invoke("logout");
     renderSettingsStatus(info);
-    $("auth-key").value = "";
+    $("login-qr").hidden = true;
+    $("login-qr").removeAttribute("src");
+    $("login-status").textContent = "已退出。点「扫码登录」重新获取二维码";
+    showToast("已退出登录", "success");
   } catch (err) {
     showToast(String(err), "error");
   }
@@ -675,16 +724,27 @@ $("btn-clear-accounts").addEventListener("click", async () => {
 
 $("btn-verify-auth").addEventListener("click", async () => {
   try {
-    const ok = await invoke("verify_auth");
-    showToast(ok ? "API 密钥有效" : "API 密钥已过期，请重新获取", ok ? "success" : "error");
+    const ok = await invoke("verify_session");
+    showToast(ok ? "登录仍然有效" : "登录已失效，请重新扫码", ok ? "success" : "error");
+    if (!ok) {
+      $("login-status").textContent = "登录已失效，请重新扫码";
+    }
+    await loadSettings();
   } catch (err) {
     showToast(String(err), "error");
   }
 });
 
-$("link-site").addEventListener("click", (e) => {
-  e.preventDefault();
-  showToast("请在浏览器打开 down.mptext.top 获取密钥");
+listen("login-qr", (event) => {
+  const img = $("login-qr");
+  img.src = event.payload.image;
+  img.hidden = false;
+});
+
+listen("login-status", (event) => {
+  if (typeof event.payload === "string" && event.payload) {
+    $("login-status").textContent = event.payload;
+  }
 });
 
 // 抓取阶段进度：实时显示已获取篇数与当前页
@@ -698,11 +758,13 @@ listen("fetch-articles-progress", (event) => {
       spinning: true,
     });
   } else {
+    // page 现在是通道序号（1 主页栏目 / 2 搜狗索引 / 3 登录态），
+    // 显示通道名比显示「第 N 页」更接近真实进度
     showProgress({
       phase: "正在抓取文章",
       counter: `已获取 <b>${p.fetched}</b> 篇`,
       percent: -1,
-      detail: `<span class="cur-title">正在读取第 ${p.page} 页…</span>`,
+      detail: `<span class="cur-title">${escapeHtml(p.status)}…</span>`,
       spinning: true,
     });
   }
@@ -713,6 +775,8 @@ listen("auto-articles-ready", (event) => {
   const articles = Array.isArray(event.payload) ? event.payload : [];
   state.articles = articles;
   state.fetchedAll = true;
+  state.articleIndex.clear();
+  articles.forEach((a) => state.articleIndex.set(a.url, a));
   state.selectedUrls = new Set(articles.map((a) => a.url));
   resetDlCounter(articles.length);
   renderArticles();
@@ -739,5 +803,194 @@ listen("download-progress", (event) => {
   renderDownloadProgress(p.title);
 });
 
+// ---------------------------------------------------------------------------
+// 全量历史：微信客户端抓包 + 作者通道
+// ---------------------------------------------------------------------------
+
+let mitmTimer = null;
+
+function renderMitmState(s) {
+  $("mitm-port-label").textContent = String(s.port);
+  $("ca-path").textContent = s.ca_path || "-";
+  const lines = [
+    `代理：<b>${s.running ? `运行中（127.0.0.1:${s.port}）` : "未运行"}</b>`,
+    `证书：<b>${s.ca_trusted ? "已被系统信任" : "尚未信任（首次需点「装信任证书」）"}</b>`,
+    `已抓公众号：<b>${s.captured_accounts}</b>`,
+  ];
+  // 后端 message 只在代理运行时有增量信息，未运行时会和第一行重复
+  if (s.running && s.message) lines.push(escapeHtml(s.message));
+  $("mitm-status").innerHTML = lines.join("<br>");
+  $("btn-mitm-start").disabled = s.running;
+  $("btn-mitm-stop").disabled = !s.running;
+}
+
+async function refreshMitm() {
+  try {
+    const s = await invoke("mitm_status");
+    renderMitmState(s);
+  } catch (err) {
+    $("mitm-status").textContent = `读取状态失败：${err}`;
+  }
+  try {
+    const list = await invoke("list_captured_accounts");
+    const ul = $("captured-list");
+    if (!Array.isArray(list) || list.length === 0) {
+      ul.innerHTML = '<li class="empty">还没抓到。开启代理后在微信里打开一篇文章。</li>';
+    } else {
+      ul.innerHTML = list
+        .map(
+          (a) => `
+        <li class="captured-row">
+          <div class="cap-main">
+            <div class="cap-biz">${escapeHtml(a.biz || "（未知号）")}</div>
+            <div class="cap-meta">
+              票据 ${a.has_ticket ? "完整" : "不完整"} ·
+              Cookie ${a.cookie_valid ? "有效" : "无/过期"}
+              ${a.author_id ? ` · author_id ${escapeHtml(a.author_id)}` : ""}
+            </div>
+          </div>
+        </li>`,
+        )
+        .join("");
+    }
+  } catch (err) {
+    $("captured-list").innerHTML = `<li class="empty">${escapeHtml(String(err))}</li>`;
+  }
+}
+
+/** 抓包期间轮询状态，让「已抓到 N 个公众号」实时变化。 */
+function startMitmPolling() {
+  if (mitmTimer) return;
+  mitmTimer = setInterval(refreshMitm, 2000);
+}
+
+function stopMitmPolling() {
+  if (mitmTimer) {
+    clearInterval(mitmTimer);
+    mitmTimer = null;
+  }
+}
+
+$("btn-mitm-trust").addEventListener("click", async () => {
+  try {
+    showToast("系统会弹出授权框，请点「允许」…");
+    const s = await invoke("mitm_trust_ca");
+    renderMitmState(s);
+    showToast("证书已信任，可以开启代理了", "success");
+  } catch (err) {
+    showToast(String(err), "error");
+  }
+});
+
+$("btn-mitm-start").addEventListener("click", async () => {
+  try {
+    const s = await invoke("mitm_start", { port: 8899 });
+    renderMitmState(s);
+    startMitmPolling();
+    showToast("代理已启动，接着点「指向系统代理」", "success");
+  } catch (err) {
+    showToast(String(err), "error");
+  }
+});
+
+$("btn-mitm-stop").addEventListener("click", async () => {
+  const s = await invoke("mitm_stop");
+  renderMitmState(s);
+  stopMitmPolling();
+  showToast("代理已停止");
+});
+
+$("btn-mitm-proxy-on").addEventListener("click", async () => {
+  try {
+    const s = await invoke("mitm_set_proxy", { enabled: true, port: mitmPort() });
+    renderMitmState(s);
+    showToast("系统代理已指向本地抓包端口", "success");
+  } catch (err) {
+    showToast(String(err), "error");
+  }
+});
+
+$("btn-mitm-proxy-off").addEventListener("click", async () => {
+  try {
+    const s = await invoke("mitm_set_proxy", { enabled: false, port: mitmPort() });
+    renderMitmState(s);
+    showToast("系统代理已恢复", "success");
+  } catch (err) {
+    showToast(String(err), "error");
+  }
+});
+
+function mitmPort() {
+  const n = parseInt($("mitm-port-label").textContent, 10);
+  return Number.isFinite(n) ? n : 8899;
+}
+
+$("btn-clear-captures").addEventListener("click", async () => {
+  try {
+    await invoke("clear_captured_accounts");
+    await refreshMitm();
+    showToast("已清空抓到的票据", "success");
+  } catch (err) {
+    showToast(String(err), "error");
+  }
+});
+
+$("btn-author-fetch").addEventListener("click", async () => {
+  const url = $("author-url").value.trim();
+  if (!url) {
+    showToast("请先贴一篇该公众号的文章链接", "error");
+    return;
+  }
+  const btn = $("btn-author-fetch");
+  btn.disabled = true;
+  $("author-result").textContent = "正在反查公众号并抓取，首次可能要几十秒…";
+  $("author-preview").innerHTML = "";
+  try {
+    const result = await invoke("list_articles_by_author", {
+      payload: { url, max_pages: 0 },
+    });
+    const articles = Array.isArray(result.articles) ? result.articles : [];
+    const channels = Array.isArray(result.channels) ? result.channels : [];
+    $("author-result").innerHTML = [
+      `公众号：<b>${escapeHtml(result.nickname || "（未能识别昵称）")}</b>`,
+      `__biz：<code>${escapeHtml(result.biz || "-")}</code>`,
+      `共 <b>${articles.length}</b> 篇`,
+      `通道：${channels.map(escapeHtml).join(" + ") || "-"}`,
+      result.ticket_used
+        ? "已叠加微信客户端票据的全量历史"
+        : "未使用客户端票据（免登录通道已生效）",
+    ].join("<br>");
+
+    if (articles.length > 0) {
+      // 复用搜索下载页的列表与下载流程：切过去、全选、用户点「下载选中」。
+      state.selectedAccount = { fakeid: "", nickname: "作者全量历史" };
+      state.articles = articles;
+      state.fetchedAll = true;
+      state.articleIndex.clear();
+      articles.forEach((a) => state.articleIndex.set(a.url, a));
+      state.selectedUrls = new Set(articles.map((a) => a.url));
+      renderArticles();
+      updatePager();
+      $("article-pane-title").textContent = "作者全量历史";
+      $("author-preview").innerHTML = articles
+        .slice(0, 8)
+        .map(
+          (a) =>
+            `<div class="prev-row">${escapeHtml(a.title)}</div>`,
+        )
+        .join("");
+      showToast(`拉到 ${articles.length} 篇，已切到「搜索下载」页并全选`, "success");
+    } else {
+      $("author-preview").innerHTML = '<div class="empty">没有拉到文章</div>';
+    }
+  } catch (err) {
+    $("author-result").innerHTML = `<span class="err">${escapeHtml(String(err))}</span>`;
+    showToast(String(err), "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 loadSettings();
 loadSavedAccounts();
+refreshMitm();

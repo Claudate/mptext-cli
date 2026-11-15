@@ -12,7 +12,7 @@ pub struct UserConfig {
 }
 
 /// 配置目录（跨平台）：Win=%APPDATA%/mptext，Mac=~/.config/mptext
-fn config_dir() -> Result<PathBuf> {
+pub(crate) fn config_dir() -> Result<PathBuf> {
     let base = if cfg!(windows) {
         std::env::var("APPDATA")
             .map(PathBuf::from)

@@ -65,6 +65,62 @@ pub fn write_file(path: &Path, content: &str) -> Result<()> {
     std::fs::write(path, content).with_context(|| format!("写入文件失败: {}", path.display()))
 }
 
+/// 同一篇文章在不同通道里的去重键。
+///
+/// 各通道给出的链接并不逐字相同：搜狗那条常带 `chksm` 与 `#rd`，`/mp/homepage`
+/// 是 `scene=19#wechat_redirect`，合集又可能是另一种拼法。按完整 URL 去重会把
+/// 同一篇算成多篇——2026-10-21 实测「手工川」55 条里有 11 条是这种重复。
+///
+/// 微信文章的稳定标识是 `__biz` + `mid` + `idx`（`sn` 只是签名，会随渠道变），
+/// 三者齐备时用它们拼键；缺任何一个就退回去掉 `chksm`/`scene` 与 fragment 后的
+/// 路径，仍比原串稳定。
+pub fn article_key(url: &str) -> String {
+    let (head, _fragment) = match url.find('#') {
+        Some(pos) => (&url[..pos], &url[pos..]),
+        None => (url, ""),
+    };
+    let (path, query) = match head.find('?') {
+        Some(pos) => (&head[..pos], &head[pos + 1..]),
+        None => (head, ""),
+    };
+
+    let mut biz = None;
+    let mut mid = None;
+    let mut idx = None;
+    let mut kept: Vec<(&str, &str)> = Vec::new();
+    for pair in query.split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = match pair.find('=') {
+            Some(pos) => (&pair[..pos], &pair[pos + 1..]),
+            None => (pair, ""),
+        };
+        match k {
+            "__biz" => biz = Some(v),
+            "mid" => mid = Some(v),
+            "idx" => idx = Some(v),
+            // chksm 是正文防篡改签名，scene 是来源埋点，都不标识文章本身。
+            "chksm" | "scene" => {}
+            _ => kept.push((k, v)),
+        }
+    }
+
+    match (biz, mid, idx) {
+        (Some(b), Some(m), Some(i)) => format!("{b}/{m}/{i}"),
+        _ => {
+            // 短链 `s/<code>` 这类没有参数的文章，路径本身就是标识。
+            let kept_query = kept
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join("&");
+            if kept_query.is_empty() {
+                path.to_string()
+            } else {
+                format!("{path}?{kept_query}")
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +142,37 @@ mod tests {
         assert_eq!(p3.file_name().unwrap(), "观音诞_2.md");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn article_key_ignores_chksm_scene_and_fragment() {
+        // 同一篇文章的三种真实拼法：搜狗带 chksm+#rd、主页带 scene+#wechat_redirect、
+        // 合集不带 chksm。按 URL 字符串比较会算成三篇。
+        let a = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=2247&idx=1&sn=aa&chksm=ce97#rd";
+        let b = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=2247&idx=1&sn=aa&scene=19#wechat_redirect";
+        let c = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=2247&idx=1&sn=aa";
+        assert_eq!(article_key(a), article_key(b));
+        assert_eq!(article_key(b), article_key(c));
+    }
+
+    #[test]
+    fn article_key_separates_different_articles() {
+        let first = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=1&idx=1&sn=aa";
+        let second = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=2&idx=1&sn=aa";
+        // 同一 mid 的次条（idx=2）是另一篇文章，不能并成一条。
+        let second_in_batch = "https://mp.weixin.qq.com/s?__biz=Mzg2&mid=1&idx=2&sn=aa";
+        assert_ne!(article_key(first), article_key(second));
+        assert_ne!(article_key(first), article_key(second_in_batch));
+    }
+
+    #[test]
+    fn article_key_falls_back_to_short_link() {
+        let a = "https://mp.weixin.qq.com/s/aW42E-SFYKU8qRmJMGZsNQ";
+        let b = "https://mp.weixin.qq.com/s/aW42E-SFYKU8qRmJMGZsNQ#rd";
+        assert_eq!(article_key(a), article_key(b));
+        assert_ne!(
+            article_key(a),
+            article_key("https://mp.weixin.qq.com/s/otherCodeHere")
+        );
     }
 }

@@ -8,6 +8,11 @@ description = "Core library for mptext API client and configuration"
 [dependencies]
 anyhow.workspace = true
 reqwest.workspace = true
+scraper = "0.27.0"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+urlencoding = "2.1.3"
+regex = "1.10.0"
+hudsucker = "0.25.0"
+rcgen = "0.14"

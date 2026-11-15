@@ -21,6 +21,7 @@
         </div>
         <nav class="tabs" role="tablist">
           <button class="tab active" data-tab="search" role="tab">搜索下载</button>
+          <button class="tab" data-tab="author" role="tab">全量历史</button>
           <button class="tab" data-tab="settings" role="tab">设置</button>
         </nav>
       </header>
@@ -108,18 +109,74 @@
           </footer>
         </section>
 
+        <section id="panel-author" class="panel">
+          <div class="author-grid">
+            <div class="settings-card">
+              <h2>拉取全量历史</h2>
+              <p class="hint">
+                贴一篇该公众号的文章链接即可。<b>不需要登录、不需要抓包</b>：
+                程序从文章页反查公众号标识，然后合并三条公开通道 ——
+                <code>主页栏目</code>、<code>搜狗索引</code>、<code>合集</code>，
+                共用同一套去重与排序。
+              </p>
+              <label class="field">
+                文章链接
+                <input id="author-url" type="url" placeholder="https://mp.weixin.qq.com/s/..." />
+              </label>
+              <div class="settings-actions">
+                <button id="btn-author-fetch" class="primary">拉取全量列表</button>
+              </div>
+              <div id="author-result" class="status-box">尚未拉取</div>
+              <div id="author-preview" class="author-preview"></div>
+            </div>
+
+            <div class="settings-card">
+              <h2>可选：从微信客户端抓票据</h2>
+              <p class="hint">
+                抓到 <code>uin</code> / <code>key</code> 后能额外走一遍微信的
+                <code>/mp/author</code> 全量历史，覆盖比上面三条通道更大。
+                但这条路依赖系统代理：微信自己走 Clash / VPN 的 TUN 网卡时，
+                流量不经过系统代理，抓不到任何票据 —— 抓不到也不影响上面的功能。
+              </p>
+              <ol class="steps">
+                <li>装信任证书（首次，系统弹框里点「允许」即可，不用密码）</li>
+                <li>开启本地代理</li>
+                <li>把系统代理指向 <code>127.0.0.1:<span id="mitm-port-label">8899</span></code></li>
+                <li>在微信里（或浏览器里）打开该公众号任意一篇文章</li>
+                <li>回到这里，抓完关掉系统代理</li>
+              </ol>
+              <div class="settings-actions">
+                <button id="btn-mitm-trust" class="ghost">装信任证书</button>
+                <button id="btn-mitm-start" class="primary">开启代理</button>
+                <button id="btn-mitm-proxy-on" class="ghost">指向系统代理</button>
+                <button id="btn-mitm-proxy-off" class="ghost">恢复系统代理</button>
+                <button id="btn-mitm-stop" class="ghost danger-ghost">停止代理</button>
+              </div>
+              <div id="mitm-status" class="status-box">读取中…</div>
+              <div class="ca-line">
+                CA 证书：<code id="ca-path">-</code>
+              </div>
+              <div class="captured-head">
+                <h3>已抓到的公众号</h3>
+                <button id="btn-clear-captures" class="ghost danger-ghost">清空</button>
+              </div>
+              <ul id="captured-list" class="captured-list"></ul>
+            </div>
+          </div>
+        </section>
+
         <section id="panel-settings" class="panel">
           <div class="settings-card">
-            <h2>API 密钥设置</h2>
-            <p class="hint">在 <a href="#" id="link-site">down.mptext.top</a> 登录后获取 Auth Key</p>
-            <label class="field">
-              <span>Auth Key</span>
-              <input id="auth-key" type="password" placeholder="粘贴你的 API 密钥" autocomplete="off" />
-            </label>
+            <h2>微信登录</h2>
+            <p class="hint">用微信扫描二维码，登录任意一个你有权限的公众号后台。会话只保存在这台电脑上，用来搜索公众号。文章列表接口目前依赖搜狗移动搜索，可能无法保证完整历史。</p>
+            <div class="qr-box">
+              <img id="login-qr" alt="登录二维码" hidden />
+              <p id="login-status" class="hint">点「扫码登录」获取二维码</p>
+            </div>
             <div class="settings-actions">
-              <button id="btn-save-auth" class="primary">保存密钥</button>
-              <button id="btn-verify-auth" class="ghost">验证有效性</button>
-              <button id="btn-clear-auth" class="ghost danger-ghost">清除记忆</button>
+              <button id="btn-login" class="primary">扫码登录</button>
+              <button id="btn-verify-auth" class="ghost">检查会话</button>
+              <button id="btn-clear-auth" class="ghost danger-ghost">退出登录</button>
             </div>
             <div id="settings-status" class="status-box">加载中…</div>
           </div>

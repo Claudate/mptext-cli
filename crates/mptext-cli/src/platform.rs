@@ -33,10 +33,10 @@ fn should_pause() -> bool {
 }
 
 pub fn print_welcome() {
-    println!("mptext — mptext.top 公众号文章下载工具");
+    println!("mptext — 微信公众号文章下载");
     println!();
-    println!("首次使用请先配置 API 密钥（在 https://down.mptext.top 登录后获取）：");
-    println!("  mptext config set-token <你的密钥>");
+    println!("首次使用先扫码登录公众号后台（任意一个你有权限的号即可）：");
+    println!("  mptext login");
     println!("  mptext auth");
     println!();
     println!("常用命令：");

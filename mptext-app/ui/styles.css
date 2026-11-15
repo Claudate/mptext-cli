@@ -161,6 +161,8 @@ button:disabled {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: flex;
+  /* grid 子项默认 min-width:auto，长标题会把整栏撑出容器 */
+  min-width: 0;
   flex-direction: column;
   min-height: 0;
 }
@@ -169,14 +171,29 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
+/* 标题吃掉剩余宽度并省略：否则长公众号名会把右侧的分页控件顶出窗口 */
 .pane-head h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-head-right,
+.pager,
+.pager button,
+.pane-head-right button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .badge {
@@ -286,7 +303,7 @@ button:disabled {
 .pane-head-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .select-all {
@@ -692,6 +709,31 @@ button:disabled {
   color: var(--primary);
 }
 
+.qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.qr-box img {
+  width: 196px;
+  height: 196px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.qr-box .hint {
+  margin: 0;
+}
+
+.settings-actions {
+  flex-wrap: wrap;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -819,4 +861,139 @@ button:disabled {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------------
+   全量历史：微信客户端抓包 + 作者通道
+   --------------------------------------------------------------------------- */
+
+/* 面板本身是 flex 列布局，这里用两列网格，窄窗口自动堆叠 */
+.author-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  align-items: start;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+/* 这个面板里的卡片不再是单列定宽，交给网格排版 */
+.author-grid .settings-card {
+  max-width: none;
+}
+
+.author-grid .steps {
+  margin: 12px 0 16px;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.author-grid code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ca-line {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.captured-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.captured-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.captured-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.captured-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.cap-biz {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.cap-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field input {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.author-preview {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.prev-row {
+  padding: 8px 10px;
+  border-left: 3px solid var(--primary);
+  background: var(--bg);
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-box .err {
+  color: var(--danger);
 }
